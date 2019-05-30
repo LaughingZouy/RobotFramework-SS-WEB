@@ -1,0 +1,58 @@
+*** Settings ***
+Library           Selenium2Library
+Library           RequestsLibrary
+Library           DatabaseLibrary
+Library           Collections
+Library           DateTime
+Resource          case.txt
+Resource          config.txt
+
+*** Test Cases ***
+商城销售
+    车次清理
+    登录
+    ${instock_id}    新建采购    ${ec_orgz_id}    100    100
+    ${car_num}    入库    ${instock_id}    ${ec_orgz_id}    100    100
+    ${order_num}    新建商城订单    ${car_num}    10
+
+供货销售
+    车次清理
+    登录
+    ${instock_id}    新建采购    ${gh_orgz_id}    10    100
+    ${car_num}    入库    ${instock_id}    ${gh_orgz_id}    10    100
+    新建供货销货单    ${car_num}    10
+
+档口采购入库
+    车次清理
+    登录
+    ${instock_id}    新建采购    ${dk_orgz_id}    10    100
+    ${car_num}    入库    ${instock_id}    ${dk_orgz_id}    10    100
+    ${ypd_result1}    预盘点
+    盘点    ${ypd_result1}    0    0    ${car_num}
+
+报损
+    车次清理
+    登录
+    ${instock_id}    新建采购    ${dk_orgz_id}    10    100
+    ${car_num}    入库    ${instock_id}    ${dk_orgz_id}    10    100
+    报损    ${car_num}    4    40
+    ${r_stock}    查剩余库存    ${car_num}
+    Should Be Equal As Strings    ${r_stock}    60
+
+要货
+    车次清理
+    登录
+    发起要货申请    100    100
+    审核要货单    100    100
+    ${instock_id}    新建采购    ${gh_orgz_id}    100    100
+    ${car_num}    入库    ${instock_id}    ${gh_orgz_id}    100    100
+    ${car_num}    要货单发货    ${car_num}    10    10
+    ${car_num1}    要货入库差异反馈    ${car_num}    5    5
+    要货处理差异反馈    ${car_num1}    2    2
+
+加工
+    车次清理
+    登录
+    ${instock_id}    新建采购    ${dk_orgz_id}    100    100
+    ${car_num}    入库    ${instock_id}    ${dk_orgz_id}    100    100
+    新建加工单    ${car_num}    10    10

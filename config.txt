@@ -1,0 +1,31 @@
+﻿*** Settings ***
+Library           Selenium2Library
+Library           DatabaseLibrary
+Library           RequestsLibrary
+Library           Collections
+
+*** Variables ***
+${host1}          test01.hzsunong.cn    # 数据库host
+${db1}            sd_test04    # 数据库database
+${url1}           http://test04.hzsunong.cn    # 请求URL
+${product_depot_spec_id}    11974    # 商品规格id
+${dk_orgz_id}     283
+${supplier_id}    970
+${customer_id}    3774
+${ec_orgz_id}     317
+${gh_orgz_id}     285
+
+*** Keywords ***
+sql_return
+    [Arguments]    ${sql}
+    Connect To Database Using Custom Params    pymysql    host='${host1}',user='sunong',passwd='Sunong2018',db='${db1}',port=3306,charset='utf8'
+    ${retsult}    query    ${sql}
+    Disconnect From Database
+    [Return]    ${retsult}
+
+
+sql
+    [Arguments]    ${sql}
+    Connect To Database Using Custom Params    pymysql    host='${host1}',user='sunong',passwd='Sunong2018',db='${db1}',port=3306,charset='utf8'
+    Execute Sql String    ${sql}
+    Disconnect From Database

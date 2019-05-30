@@ -1,0 +1,301 @@
+*** Settings ***
+Library           DatabaseLibrary
+Library           Selenium2Library
+Library           RequestsLibrary
+Library           Collections
+Resource          config.txt
+
+*** Keywords ***
+车次清理
+    sql    UPDATE stock_batch_content SET `status`=-1 WHERE product_depot_spec_id=${product_depot_spec_id}
+
+盘点
+    [Arguments]    ${ypd_id}    ${quantity1}    ${package1}    ${car_num1}
+    ${product_list01}    Create Dictionary    spec_id=${product_depot_spec_id}    quantity=${quantity1}    package=${package1}    car_num=${car_num1}
+    ${product_list02}    Create List    ${product_list01}
+    ${parames}    Create Dictionary    product_list=${product_list02}    action=inventory.order.submit    client_hq_code=    id=${ypd_id}
+    ${r3}    Post Request    api    /pc/api/stock/inventory    data=${parames}
+    log    ${r3.json()}
+    ${r3.js}    To Json    ${r3.content}
+    ${r3_msg}    Get From Dictionary    ${r3.js}    msg
+    log    ${r3_msg}
+    Should Be Equal As Strings    ${r3_msg}    盘点成功
+
+预盘点
+    ${spec_ids1}    Create List    ${product_depot_spec_id}
+    ${parmes}    Create Dictionary    spec_ids=${spec_ids1}    orgz_id=${dk_orgz_id}    action=inventory.order.create    client_hq_code=
+    log    ${parmes}
+    ${r2}    Post Request    api    /pc/api/stock/inventory    data=${parmes}
+    log    ${r2.json()}
+    Should Be Equal As Strings    ${r2.status_code}    200
+    ${ypd_result1}    sql_return    select id \ from \ inventory_order \ where \ orgz_id=${dk_orgz_id} \ \ order by \ id desc \ limit \ 1;
+    ${ypd_result}    Set Variable    ${ypd_result1[0][0]}
+    [Return]    ${ypd_result}
+
+档口销售
+    [Arguments]    ${spec_price}    ${car_num}    ${packages}    ${sale_quantity}
+    ${product_depot_id1}    sql    SELECT \ product_depot_id \ FROM \ product_depot_spec \ WHERE \ id=${product_depot_spec_id};
+    ${product_id1}    sql    select \ id \ from \ products \ where product_depot_id=${product_depot_id1} and \ orgz_id=${orgz_id};
+    ${spec_price_id1}    sql    select \ id \ from \ products_spec_price \ where product_depot_id=${product_depot_id1} and product_id=${product_id1};
+    ${product_list}    Create Dictionary    amount=${spec_price}*${packages}    car_num=${car_num}    deal_spec_price=${spec_price}    packages=${packages}    sale_quantity=${sale_quantity}
+    ...    product_id=${product_id1}    spec_price_id=${spec_price_id1}
+    ${product_list1}    Create List    ${product_list}
+    ${parames}    Create Dictionary    action=web.order.create    amount=${spec_price}*${packages}    client_hq_code=    customer_id=${customer_id}    freight_template=
+    ...    orgz_id=${orgz_id}    pay_way=0    remark=    product_list=${product_list1}
+    ${r1}    Post Request    api    /mapi/order/main    data=${parames}
+    log    ${r1.json()}
+    Should Be Equal As Strings    ${r1.status_code}    200
+    ${r1.js}    To Json    ${r1.content}
+    ${r1_msg}    Get From Dictionary    ${r1.js}    msg
+    log    ${r1_msg}
+    Should Be Equal As Strings    ${r1_msg}    订单创建
+
+报损
+    [Arguments]    ${car_num1}    ${package}    ${quantity}
+    ${product_depot_id}    sql_return    select \ product_depot_id \ from \ product_depot_spec \ where \ id=${product_depot_spec_id};
+    log    ${product_depot_id}
+    ${products}    Create Dictionary    car_num=${car_num1}    imgs=    package=${package}    product_depot_id=${product_depot_id[0][0]}    product_depot_spec_id=${product_depot_spec_id}
+    ...    quantity=${quantity}    reason_content=自然损耗    reason_id=49    sale_type=2
+    ${products1}    Create List    ${products}
+    ${parames}    Create Dictionary    action=web.damaged.order.add    client_hq_code=    orgz_id=${dk_orgz_id}    products=${products1}
+    ${r1}    Post Request    api    /pc/api/stock/damaged    data=${parames}
+    log    ${r1.json()}
+    ${r1.js}    To Json    ${r1.content}
+    ${r1_msg}    Get From Dictionary    ${r1.js}    msg
+    log    ${r1_msg}
+    Should Be Equal As Strings    ${r1_msg}    新增报损单成功
+
+登录
+    ${header}    Create Dictionary    Content-Type=application/json;charset=UTF-8
+    Create Session    api    ${url1}    ${header}
+    ${data}    Create Dictionary    action=account.login    client_hq_code=    password=1234567    username=18778260001
+    ${response}    Post Request    api    pc/api/account    ${data}
+    Should Be Equal As Strings    ${response.status_code}    200
+
+查询数据库
+    [Arguments]    ${sql}
+    Connect To Database    pymysql    sd_test04    sunong    Sunong2018    test01.hzsunong.cn    3306
+    ${result}    query    ${sql}
+    [Return]    ${result}
+
+删除车次
+    Connect To Database    pymysql    sd_test04    sunong    Sunong2018    test01.hzsunong.cn    3306
+    ${sql}    Set Variable    UPDATE stock_batch_content SET `status`=4 WHERE product_depot_spec_id=${product_depot_spec_id}
+    query    ${sql}
+    Disconnect From Database
+
+新建采购
+    [Arguments]    ${orgz_id}    ${package}    ${quantity}
+    ${ProductList}    Create Dictionary    amount=30000000000    consignment_fee=    consignment_type=    liquidate_limit=    package=${package}
+    ...    product_depot_spec_id=${product_depot_spec_id}    quantity=${quantity}    remark=
+    @{Product_List}    Create List    ${ProductList}
+    ${RequestData}    Create Dictionary    action=purchase.create    car_num_remark=    client_hq_code=    freight_template=    genre=1
+    ...    is_paid=1    paid_type=0    product_list=@{Product_List}    purchase_id=274    remark=    select_orgz_id=${orgz_id}
+    ...    supplier_id=${supplier_id}
+    log    ${RequestData}
+    ${ResponseData}    Post Request    api    pc/api/bill/instock_bill    ${RequestData}
+    log    ${ResponseData.json()}
+    ${Res}    to json    ${ResponseData.text}
+    log    ${Res}
+    ${instock_id}    Get From Dictionary    ${Res}    data
+    log    ${instock_id}
+    [Return]    ${instock_id}
+
+入库
+    [Arguments]    ${instock_id}    ${orgz_id}    ${package}    ${quantity}
+    ${sql}    Set Variable    select id from purchase_order_content where purchase_order_id=${instock_id}
+    ${instock_content_id}    查询数据库    ${sql}
+    log    ${instock_content_id}
+    ${ProductList2}    Create Dictionary    amount=30000000000    instock_content_id=${instock_content_id[0][0]}    instock_package=    instock_quantity=    package=${package}
+    ...    quantity=${quantity}    remark=
+    @{Product_List2}    Create List    ${ProductList2}
+    ${RequestData2}    Create Dictionary    action=purchase.operation    cancel_reason=    car_num_remark=    client_hq_code=    commission_fee=0
+    ...    freight_template=    instock_id=${instock_id}    instock_type=1    is_agree=1    product_list=@{Product_List2}    remark=
+    ...    select_orgz_id=${orgz_id}
+    ${ResponseData2}    Post Request    api    pc/api/bill/instock_bill    ${RequestData2}
+    Should Be Equal As Strings    ${ResponseData2.status_code}    200
+    log    ${ResponseData2.json()}
+    ${sql}    Set Variable    SELECT car_num FROM instock_content WHERE instock_id IN(SELECT id FROM instock WHERE related_code in (SELECT `code` FROM purchase_order WHERE id=${instock_id}))
+    ${carnum}    查询数据库    ${sql}
+    log    ${carnum}
+    ${car_num}    Set Variable    ${carnum[0][0]}
+    log    ${car_num}
+    ${sql}    Set Variable    SELECT inventory_core_num FROM stock_batch_content WHERE car_num='${car_num}' and product_depot_spec_id =${product_depot_spec_id}
+    ${core_num}    查询数据库    ${sql}
+    ${sql}    Set Variable    SELECT inventory_assist_num FROM stock_batch_content WHERE car_num='${car_num}' and product_depot_spec_id =${product_depot_spec_id}
+    ${assist_num}    查询数据库    ${sql}
+    log    ${assist_num[0][0]}
+    ${sql}    Set Variable    select instock_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
+    ${instock_core_num1}    查询数据库    ${sql}
+    ${instock_core_num}    Convert To Integer    ${instock_core_num1[0][0]}
+    ${current_core_num}    查剩余库存    ${car_num}
+    Should Be Equal As Numbers    ${instock_core_num}    ${current_core_num}
+    [Return]    ${car_num}
+
+获取当前日期
+    ${year}    ${mounth}    ${day}    get time    year month day
+    ${Date}    Catenate    SEPARATOR=-    ${year}    ${mounth}    ${day}
+    log    ${Date}
+    [Return]    ${Date}
+
+新建商城订单
+    [Arguments]    ${car_num}    ${order_num}    # 车次号|下单数量
+    ${sql}    Set Variable    SELECT id FROM ec_product WHERE product_depot_id IN (SELECT product_depot_id FROM product_depot_spec WHERE id=${product_depot_spec_id})
+    ${product_id}    查询数据库    ${sql}
+    log    ${product_id[0][0]}
+    ${sql}    Set Variable    SELECT id FROM ec_product_spec WHERE product_id=${product_id[0][0]}
+    ${spec_id}    查询数据库    ${sql}
+    ${ProductList3}    Create Dictionary    product_customer_remark=    product_id=${product_id[0][0]}    product_order_num=${order_num}    spec_id=${spec_id[0][0]}
+    ${Product_List3}    Create List    ${ProductList3}
+    ${OrderCreateData}    Create Dictionary    action=order.create    address_id=514    client_hq_code=    customer_id=${customer_id}    freight_collect=0
+    ...    is_pick_up=0    orgz_id=${ec_orgz_id}    products=${Product_List3}    service_id=440
+    ${OrderCreateRes}    Post Request    api    pc/api/bill/order    ${OrderCreateData}
+    log    ${OrderCreateRes.json()}
+    ${sql}    Set Variable    SELECT `code` from ec_order where customer_id=${customer_id} and order_status=0 ORDER BY created_at DESC LIMIT 1
+    ${order_code}    查询数据库    ${sql}
+    ${OrderPayData}    Create Dictionary    action=order.pay    client_hq_code=0    order_code=${order_code[0][0]}    paid_type=0
+    ${OrderPayRes}    Post Request    api    pc/api/bill/order    ${OrderPayData}
+    Should Be Equal As Strings    ${OrderPayRes.status_code}    200
+    log    ${OrderPayRes.json()}
+    ${sql}    Set Variable    SELECT id FROM ec_order_content WHERE ec_order_id IN (SELECT id FROM ec_order WHERE `code`='${order_code[0][0]}')
+    ${order_content_id}    查询数据库    ${sql}
+    ${OrderContents}    Create Dictionary    car_num=${car_num}    order_content_id=${order_content_id[0][0]}    sending_package=${order_num}    sending_quantity=${order_num}    sending_remark=
+    ${order_contents}    Create List    ${OrderContents}
+    ${DeliveryCreateData}    Create Dictionary    action=delivery.create    bill_extra_fee=    client_hq_code=    driver_car_number=浙A12345    driver_name=送货员
+    ...    driver_number=15869185316    order_code=${order_code[0][0]}    order_contents=${order_contents}    preparer_id=306    preparer_name=卜泽民    real_freight=0
+    ...    receiver_name=测试    receiver_tel=15869185316    type=0
+    ${DeliveryCreateRes}    Post Request    api    pc/api/bill/delivery_bill    ${DeliveryCreateData}
+    Should Be Equal As Strings    ${DeliveryCreateRes.status_code}    200
+    log    ${DeliveryCreateRes.json()}
+    ${sql}    Set Variable    select id from final_payment_bill where related_code='${order_code[0][0]}'
+    ${finalpay_id}    查询数据库    ${sql}
+    ${Date}    获取当前日期
+    ${FinalPayData}    Create Dictionary    action=final.payment.pay    client_hq_code=    id=${finalpay_id[0][0]}    paid_date=${Date}    paid_type=0
+    ${FinalPayRes}    Post Request    api    pc/api/bill/final_payment_bill    ${FinalPayData}
+    Should Be Equal As Strings    ${FinalPayRes.status_code}    200
+    log    ${FinalPayRes.json()}
+    ${sql}    Set Variable    select instock_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
+    ${instock_core_num1}    查询数据库    ${sql}
+    ${instock_core_num}    Convert To Integer    ${instock_core_num1[0][0]}
+    ${current_core_num}    查剩余库存    ${car_num}
+    ${sell_core_num}    Set Variable    ${${instock_core_num}-${current_core_num}}
+    Should Be Equal As Numbers    ${sell_core_num}    ${order_num}
+    [Return]    ${order_num}
+
+查剩余库存
+    [Arguments]    ${car_num}
+    ${sql}    Set Variable    select inventory_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
+    ${current_core_num1}    查询数据库    ${sql}
+    ${current_core_num}    Convert To Integer    ${current_core_num1[0][0]}
+    log    ${current_core_num}
+    [Return]    ${current_core_num}
+
+新建供货销货单
+    [Arguments]    ${car_num}    ${sale_quantity}
+    ${sql}    Set Variable    select id from supply_product where name='自动化货品' and orgz_id=${gh_orgz_id}
+    ${productid}    sql_return    ${sql}
+    ${product_id}    Set Variable    ${productid[0][0]}
+    log    ${product_id}
+    ${sql}    Set Variable    select id from supply_products_spec_price where product_id=${product_id}
+    ${spec_priceid}    sql_return    ${sql}
+    ${spec_price_id}    Set Variable    ${spec_priceid[0][0]}
+    log    ${spec_price_id}
+    ${price1}    sql_return    select sale_price from supply_products_spec_price where product_id=${product_id}
+    ${ProductList4}    Create Dictionary    amount=5000000000    car_num=${car_num}    deal_spec_price=500000000    packages=10    product_id=${product_id}
+    ...    remark=    sale_quantity=${sale_quantity}    spec_price_id=${spec_price_id}
+    ${product_list4}    Create List    ${ProductList4}
+    ${Date}    获取当前日期
+    ${SupplyCreateData}    Create Dictionary    action=supply.order.create    amount=5000000000    assistant_id=308    client_hq_code=    created_type=1
+    ...    customer_id=${customer_id}    freight_template=    is_confirmed_amount=1    order_at=${Date}    order_id=    orgz_id=${gh_orgz_id}
+    ...    pay_way=0    product_list=${Product_List4}    remark=    tag_id=
+    ${SupplyCreateRes}    Post Request    api    mapi/order/supply    ${SupplyCreateData}
+    Should Be Equal As Strings    ${SupplyCreateRes.status_code}    200
+    log    ${SupplyCreateRes.json()}
+    ${instock_core_num1}    sql_return    select instock_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
+    ${instock_core_num}    Convert To Integer    ${instock_core_num1[0][0]}
+    ${current_core_num}    查剩余库存    ${car_num}
+    ${sell_core_num}    Set Variable    ${${instock_core_num}-${current_core_num}}
+    Should Be Equal As Numbers    ${sell_core_num}    ${sale_quantity}    #备注
+
+发起要货申请
+    [Arguments]    ${package}    ${quantity}
+    ${ProductList}    Create Dictionary    product_depot_spec_id=${product_depot_spec_id}    remark=    requirement_package=${package}    requirement_quantity=${quantity}
+    ${product_list}    Create List    ${ProductList}
+    log    ${product_list}
+    ${date}    获取当前日期
+    ${req}    Create Dictionary    action=web.requirement.add    client_hq_code=    delivery_orgz_id=${gh_orgz_id}    delivery_orgz_name=车次供货    expect_receive_at=${date}
+    ...    orgz_id=${dk_orgz_id}    products=${product_list}    remark=自动化测试
+    ${res}    Post Request    api    pc/api/stock/requirement    ${req}
+    Should Be Equal As Integers    ${res.status_code}    200
+    log    ${res.json()}
+
+审核要货单
+    [Arguments]    ${package}    ${quantity}
+    ${requirement_content_id}    sql_return    select id from requirement_content \ where product_depot_spec_id=${product_depot_spec_id} order by created_at desc limit 1
+    ${requirement_id}    sql_return    select id from requirement_order where remark='自动化测试' and delivery_orgz_id =${gh_orgz_id} order by created_at desc limit 1
+    ${ProductList}    Create Dictionary    auditor_package=${package}    auditor_quantity=${quantity}    product_depot_spec_id=${product_depot_spec_id}    requirement_order_content_id=${requirement_content_id[0][0]}
+    ${product_list}    Create List    ${ProductList}
+    ${req}    Create Dictionary    action=web.requirement.confirm    client_hq_code=    id=${requirement_id[0][0]}    products=${product_list}
+    ${res}    Post Request    api    pc/api/stock/requirement    ${req}
+    Should Be Equal As Strings    ${res.status_code}    200
+    log    ${res.json()}
+
+要货单发货
+    [Arguments]    ${car_num}    ${package}    ${quantity}
+    ${requirement_id}    sql_return    select id from requirement_order where remark='自动化测试' and delivery_orgz_id =${gh_orgz_id} order by created_at desc limit 1
+    ${ProductList}    Create Dictionary    car_num=${car_num}    delivery_package=${package}    delivery_quantity=${quantity}    price=0    product_depot_spec_id=${product_depot_spec_id}
+    ...    remark=
+    ${products}    Create List    ${ProductList}
+    ${req}    Create Dictionary    action=web.requirement.delivery    adjust_price=0    client_hq_code=    delivery_remark=    driver_car_number=浙A12345
+    ...    driver_name=测试    driver_number=15869185316    freight_template=    id=${requirement_id[0][0]}    products=${products}
+    ${res}    Post Request    api    pc/api/stock/requirement    ${req}
+    Should Be Equal As Strings    ${res.status_code}    200
+    log    ${res.json()}
+    [Return]    ${car_num}
+
+要货入库差异反馈
+    [Arguments]    ${car_num}    ${package}    ${quantity}
+    ${requirement_id}    sql_return    select id from requirement_order where remark='自动化测试' and delivery_orgz_id =${gh_orgz_id} order by created_at desc limit 1
+    ${product_depot_id}    sql_return    select product_depot_id from product_depot_spec where id=${product_depot_spec_id}
+    ${car_num1}    Create List    ${car_num}
+    ${product_list}    Create Dictionary    car_num=${car_num1}    car_num_remark=    product_depot_id=${product_depot_id[0][0]}    product_depot_spec_id=${product_depot_spec_id}    receive_package=${package}
+    ...    receive_quantity=${quantity}    remark=    solve_type=2
+    ${products}    Create List    ${product_list}
+    ${req}    Create Dictionary    action=requirement.instock.receive    car_num_remark=    client_hq_code=    freight_template=    id=${requirement_id[0][0]}
+    ...    products=${products}
+    ${res}    Post Request    api    pc/api/stock/requirement    ${req}
+    Should Be Equal As Strings    ${res.status_code}    200
+    log    ${res.json()}
+    [Return]    ${car_num1}
+
+要货处理差异反馈
+    [Arguments]    ${car_num1}    ${package}    ${quantity}
+    ${requirement_id}    sql_return    select id from requirement_order where remark='自动化测试' and delivery_orgz_id =${gh_orgz_id} order by created_at desc limit 1
+    ${product_depot_id}    sql_return    select product_depot_id from product_depot_spec where id=${product_depot_spec_id}
+    ${product_list}    Create Dictionary    car_num=${car_num1}    confirmed_diff_package=${package}    confirmed_diff_quantity=${quantity}    product_depot_id=${product_depot_id[0][0]}    product_depot_spec_id=${product_depot_spec_id}
+    ...    remark=    solve_type=2
+    ${products}    Create List    ${product_list}
+    ${req}    Create Dictionary    action=requirement.solve.diff    client_hq_code=    id=${requirement_id[0][0]}    products=${products}
+    ${res}    Post Request    api    pc/api/stock/requirement    ${req}
+    Should Be Equal As Strings    ${res.status_code}    200
+    log    ${res.json()}
+
+新建加工单
+    [Arguments]    ${car_num}    ${package}    ${quantity}
+    ${raw_products_list}    Create Dictionary    car_num=${car_num}    lose_package=0    lose_quantity=0    package=${package}    product_depot_spec_id=${product_depot_spec_id}
+    ...    quantity=${quantity}
+    ${raw_products}    Create List    ${raw_products_list}
+    ${ripe_products_list}    Create Dictionary    cost_source=    estimate_price=    package=    product_depot_spec_id=1418    quantity=15
+    ...    ratio=100
+    ${ripe_products}    Create List    ${ripe_products_list}
+    ${process_date}    获取当前日期
+    ${req}    Create Dictionary    action=web.process.add    client_hq_code=    freight_template=    process_date=${process_date}    raw_products=${raw_products}
+    ...    ripe_products=${ripe_products}    select_orgz_id=${dk_orgz_id}    set_ratio=0    template_id=
+    ${res}    Post Request    api    pc/api/bill/process    ${req}
+    Should Be Equal As Strings    ${res.status_code}    200
+    log    ${res.json()}
+    ${instock_core_num1}    sql_return    select instock_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
+    ${instock_core_num}    Convert To Integer    ${instock_core_num1[0][0]}
+    ${current_core_num}    查剩余库存    ${car_num}
+    ${used_core_num}    Set Variable    ${${instock_core_num}-${current_core_num}}
+    Should Be Equal As Numbers    ${used_core_num}    ${package}
