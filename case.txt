@@ -102,12 +102,12 @@ Resource          config.txt
     [Return]    ${instock_id}
 
 入库
-    [Arguments]    ${instock_id}    ${orgz_id}    ${package}    ${quantity}
+    [Arguments]    ${instock_id}    ${orgz_id}    ${package}    ${instock_quantity}
     ${sql}    Set Variable    select id from purchase_order_content where purchase_order_id=${instock_id}
     ${instock_content_id}    查询数据库    ${sql}
     log    ${instock_content_id}
     ${ProductList2}    Create Dictionary    amount=30000000000    instock_content_id=${instock_content_id[0][0]}    instock_package=    instock_quantity=    package=${package}
-    ...    quantity=${quantity}    remark=
+    ...    quantity=${instock_quantity}    remark=
     @{Product_List2}    Create List    ${ProductList2}
     ${RequestData2}    Create Dictionary    action=purchase.operation    cancel_reason=    car_num_remark=    client_hq_code=    commission_fee=0
     ...    freight_template=    instock_id=${instock_id}    instock_type=1    is_agree=1    product_list=@{Product_List2}    remark=
@@ -231,7 +231,7 @@ Resource          config.txt
 
 审核要货单
     [Arguments]    ${package}    ${quantity}
-    ${requirement_content_id}    sql_return    select id from requirement_content \ where product_depot_spec_id=${product_depot_spec_id} order by created_at desc limit 1
+    ${requirement_content_id}    sql_return    select id from requirement_content where product_depot_spec_id=${product_depot_spec_id} order by created_at desc limit 1
     ${requirement_id}    sql_return    select id from requirement_order where remark='自动化测试' and delivery_orgz_id =${gh_orgz_id} order by created_at desc limit 1
     ${ProductList}    Create Dictionary    auditor_package=${package}    auditor_quantity=${quantity}    product_depot_spec_id=${product_depot_spec_id}    requirement_order_content_id=${requirement_content_id[0][0]}
     ${product_list}    Create List    ${ProductList}
@@ -292,10 +292,9 @@ Resource          config.txt
     ${req}    Create Dictionary    action=web.process.add    client_hq_code=    freight_template=    process_date=${process_date}    raw_products=${raw_products}
     ...    ripe_products=${ripe_products}    select_orgz_id=${dk_orgz_id}    set_ratio=0    template_id=
     ${res}    Post Request    api    pc/api/bill/process    ${req}
-    Should Be Equal As Strings    ${res.status_code}    200
     log    ${res.json()}
-    ${instock_core_num1}    sql_return    select instock_core_num from stock_batch_content where car_num='${car_num}' and product_depot_spec_id=${product_depot_spec_id}
-    ${instock_core_num}    Convert To Integer    ${instock_core_num1[0][0]}
+    Should Be Equal As Strings    ${res.status_code}    200
+    ${msg}    get_msg    ${res}
+    Should Be Equal As Strings    ${msg}    保存加工单成功
     ${current_core_num}    查剩余库存    ${car_num}
-    ${used_core_num}    Set Variable    ${${instock_core_num}-${current_core_num}}
-    Should Be Equal As Numbers    ${used_core_num}    ${package}
+    Should Be Equal As Numbers    ${${instock_quantity}-${current_core_num}}    ${quantity}

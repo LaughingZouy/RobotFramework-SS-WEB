@@ -1,4 +1,4 @@
-﻿*** Settings ***
+*** Settings ***
 Library           Selenium2Library
 Library           DatabaseLibrary
 Library           RequestsLibrary
@@ -14,6 +14,7 @@ ${supplier_id}    970
 ${customer_id}    3774
 ${ec_orgz_id}     317
 ${gh_orgz_id}     285
+${instock_quantity}    80    # 采购入库数量
 
 *** Keywords ***
 sql_return
@@ -23,9 +24,15 @@ sql_return
     Disconnect From Database
     [Return]    ${retsult}
 
-
 sql
     [Arguments]    ${sql}
     Connect To Database Using Custom Params    pymysql    host='${host1}',user='sunong',passwd='Sunong2018',db='${db1}',port=3306,charset='utf8'
     Execute Sql String    ${sql}
     Disconnect From Database
+
+get_msg
+    [Arguments]    ${res}
+    ${res_msg}    to json    ${res.text}
+    ${msg}    Get From Dictionary    ${res_msg}    msg
+    log    ${msg}
+    [Return]    ${msg}

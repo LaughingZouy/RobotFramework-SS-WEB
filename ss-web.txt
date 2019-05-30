@@ -54,5 +54,5 @@ Resource          config.txt
     车次清理
     登录
     ${instock_id}    新建采购    ${dk_orgz_id}    100    100
-    ${car_num}    入库    ${instock_id}    ${dk_orgz_id}    100    100
+    ${car_num}    入库    ${instock_id}    ${dk_orgz_id}    100    ${instock_quantity}
     新建加工单    ${car_num}    10    10
